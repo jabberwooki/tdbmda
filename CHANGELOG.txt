@@ -1,0 +1,4 @@
+MDA Utils 0.1, 2015-04-23
+----------------------
+MDA Utils very first version.
+Homonyms control mecanism.
