@@ -1,0 +1,147 @@
+<?php
+
+/**
+ * @file
+ * MDA34 Utilities.
+ */
+
+/**
+ * Implements hook_enable().
+ *
+ * Create a field and attach it to node bundle 'identite'.
+ */
+function mda_utils_enable() {
+	// Create base field field_homonym.	
+	$field = array(
+		'field_name' => "field_homonym",
+		'type' => 'list_boolean',
+		'cardinality' => 1,
+		'settings' => array(
+			'allowed_values' => array(
+			  // The docs say that this is optional, but without it, the value is never saved to the datbase
+				0 => '',
+				1 => '',
+			),
+		),
+	);
+	field_create_field($field);
+	
+	// Create instance field 'Création d'un homonyme' and attach to content type 'identite'.
+	$instance = array(
+		'field_name' => $field['field_name'],
+		'entity_type' => 'node',
+		'bundle' => 'identite',
+	  'label' => 'Création d\'un homonyme',
+	  'required' => false,
+	  'widget' => array(
+	    'type' => 'options_onoff',
+	    'settings' => array(
+	      'display_label' => 1,
+	    	'weight' => 0,
+			),
+		),
+	);
+	field_create_instance($instance);
+}
+
+/**
+ * Implements hook_disable().
+ *
+ * Remove field instance from node bundle (content type) and then delete the field.
+ */
+function mda_utils_disable() {
+	$instance = array(
+			'field_name' => 'field_homonym',
+			'entity_type' => 'node',
+			'bundle' => 'identite',
+	);
+	field_delete_instance($instance);
+	field_delete_field($instance['field_name']);
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function mda_utils_form_identite_node_form_alter(&$form, &$form_state, $form_id) {
+	// If node is being created, not edited, we add a custom validation function
+	if (!isset($form_state['node']->nid)) {
+		$form['#validate'][] = 'mda_duplicate_identite_form_validate';
+	}
+}
+
+/**
+ * Custom form validation handler for duplicate identities.
+ */
+function mda_duplicate_identite_form_validate($form, &$form_state) {
+	// Run validation only if field_homonym checkbox field is not checked.
+	// A checked field means that user wants to save an homonym.
+	if (!isset($form_state['input']['field_homonym']['und'])) {
+		// Submitted Nom and Prenom values.
+		$firstname = $form_state['input']['field_a_prenom']['und'][0]['value'];
+		$lastname = $form_state['input']['field_a_nom']['und'][0]['value'];
+		
+		// Fetch homonyms in database.
+		$query = new EntityFieldQuery;
+		$query->entityCondition('entity_type', 'node')
+		->entityCondition('bundle', 'identite')
+		->propertyCondition('status', 1)
+		->fieldCondition('field_a_nom', 'value', $lastname)
+		->fieldCondition('field_a_prenom', 'value', $firstname);
+		$results = $query->execute();
+		
+		if (isset($results['node'])) {
+			// Load nodes to get Contacts data.
+			$nodes = node_load_multiple(array_keys($results['node']));
+			
+			// Prepare text to by displayed in Drupal messages region.
+			$text = 'une fiche de contact';
+			$nb = sizeof($nodes);
+			if ($nb > 1) {
+				$text = 'plusieurs fiches de contact';
+			}
+			$text = 'ATTENTION ! Il existe déjà ' . $text . ' avec les mêmes nom et prénom.';
+				
+			// Get possible values displayed by field field_a_qui.
+			$field_who = field_info_field('field_a_qui');
+			$who_values= list_allowed_values($field_who);
+			
+			// Build list of Contacts.
+			$text .= '<dl class="duplicate-identities-contacts">';
+			$count = 1;
+			foreach ($nodes as $node) {
+				$form_nb = '';
+				if ($nb > 1 ) {
+					$form_nb = $count;
+				}
+				$text .= '<dt>Contacts fiche ' . $form_nb . ' </dt>';
+				$node_wrapper = entity_metadata_wrapper('node', $node);
+				
+				foreach ($node_wrapper->field_a_contact as $field_collection_wrapper) {
+					$field_collection = $field_collection_wrapper->value();
+	
+					$who_name = '';
+					$who_value = $field_collection->field_a_qui['und'][0]['value'];
+					$who = $who_values[$who_value];
+					if ($who_value != 3) {
+						$who_name = '(' . $field_collection->field_a_nom_contact['und'][0]['value'] . ')';
+					}
+					$contact = $who . ' ' . $who_name;
+					
+					$text .= '<dd>' . $who . ' ' . $who_name . '</dd>';
+				}
+				$count++;
+			}
+			$text .= '</dl>';
+	
+			// Label of field_homonym's field instance in "identite" bundle.
+			$field_homonym = field_info_instance('node', 'field_homonym', 'identite');
+			$field_homonym_label = $field_homonym['label'];
+	
+			$text .= 'Si vous souhaitez quand-même enregistrer cette fiche,';
+			$text .= ' cochez la case <b><i>' . $field_homonym_label . '</i></b>';
+			$text .= ' située en bas du formulaire puis cliquez sur <b>ENREGISTRER</b>.';
+			
+			form_set_error('homonym', $text);
+		}
+	}
+}

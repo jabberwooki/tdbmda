@@ -1,0 +1,4 @@
+name = MDA Utils
+description = Custom functions handling specific MDA requirements.
+core = 7.x
+package = MDA34
