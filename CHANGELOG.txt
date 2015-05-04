@@ -1,3 +1,10 @@
+MDA Utils 0.2, 2015-05-04
+-------------------------
+- Automatic creation of Orientation node when Contact node is created and
+Orientation node linked to Contact node. Email sent to concerned professional.
+- MDA admin page containing Orientation email settings.
+
+
 MDA Utils 0.1, 2015-04-23
 ----------------------
 MDA Utils very first version.
