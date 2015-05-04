@@ -1,4 +1,5 @@
 name = MDA Utils
 description = Custom functions handling specific MDA requirements.
 core = 7.x
+dependencies[] = hook_post_action
 package = MDA34
