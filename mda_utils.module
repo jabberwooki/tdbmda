@@ -60,6 +60,25 @@ function mda_utils_disable() {
 }
 
 /**
+ * Implements hook_menu().
+ */
+function mda_utils_menu() {
+	$items = array();
+
+	$items['admin/config/mda'] = array(
+			'title' => t('MDA'),
+			'description' => 'MDA settings',
+			'page callback' => 'drupal_get_form',
+			'page arguments' => array('mda_settings_form'),
+			'access arguments' => array('administer MDA'),
+			'file' => 'mda_utils.admin.inc',
+			'type' => MENU_NORMAL_ITEM,
+	);
+
+	return $items;
+}
+
+/**
  * Implements hook_form_FORM_ID_alter().
  */
 function mda_utils_form_identite_node_form_alter(&$form, &$form_state, $form_id) {
@@ -143,5 +162,78 @@ function mda_duplicate_identite_form_validate($form, &$form_state) {
 			
 			form_set_error('homonym', $text);
 		}
+	}
+}
+
+/**
+ * Implements hook_node_postinsert().
+ * See module Hook Post Action (https://www.drupal.org/project/hook_post_action).
+ */
+function mda_utils_node_postinsert($node) {
+	if ($node->type == 'identite') {
+		// Logging for node identite creation.
+		$firstname = $node->field_a_prenom['und'][0]['value'];
+		$lastname = $node->field_a_nom['und'][0]['value'];
+		$message = t('Node identite for %firstname %lastname created.', array('%firstname' => $firstname, '%lastname' => $lastname));
+		watchdog('mda', $message);
+		
+		// Ccreation of corresponding creation node.
+		$orientation_node = new stdClass();
+		$orientation_node->type = 'orientation';
+		$orientation_node->language = LANGUAGE_NONE;
+		node_object_prepare($orientation_node);
+		
+		$orientation_node->title = "Orientation de " . $firstname . ' ' . $lastname;
+		$orientation_node->status = 1;
+		$orientation_node->promote = 0;
+		$orientation_node->sticky = 0;
+		$orientation_node->comment = 1;
+		$orientation_node->uid = 1;
+		$orientation_node->field_b_nom[LANGUAGE_NONE][0]['nid'] = $node->nid;
+		
+		node_save($orientation_node);
+		
+		$message = t('Node orientation for %firstname %lastname created', array('%firstname' => $firstname, '%lastname' => $lastname));
+		watchdog('mda', $message);
+		
+		// Email message building.
+		$user = user_load($node->field_a_transmission['und'][0]['uid']);
+		$to = $user->mail;
+		$from = variable_get('mda_orientation_email_from');
+		
+		$email_subject = variable_get('mda_orientation_email_subject', '[Tdbmda] : Nouvelle orientation à traiter');
+		$email_subject = str_replace('%contact', $node->title, $email_subject);
+		
+		$email_body = variable_get('mda_orientation_email_body', 'http://192.168.1.7/tdbmda/demande2015');
+		$email_body = str_replace('%lastname', strtolower($lastname), $email_body);
+		$email_body = str_replace('%firstname', strtolower($firstname), $email_body);
+		
+		$params = array(
+			'subject' => $email_subject,
+			'body' => $email_body,
+		);
+		
+		if (drupal_mail('mda_utils', 'orientation_email', $to, language_default(), $params, $from)) {
+			$message = t('Orientation email message sent successfully to %to', array('%to' => $to));
+			$type = 'status';
+		}
+		else {
+			$message = t('Orientation email message could not be sent to %to', array('%to' => $to));
+			'warning';
+		}
+		watchdog('mda', $message);
+		drupal_set_message($message, $type);
+	}
+}
+
+/**
+ * Implements hook_mail().
+ */
+function mda_utils_mail($key, &$message, $params) {
+	switch ($key) {
+		case 'orientation_email':
+			$message['subject'] = $params['subject'];
+			$message['body'][] = $params['body'];
+			break;
 	}
 }
