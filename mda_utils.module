@@ -79,6 +79,17 @@ function mda_utils_menu() {
 }
 
 /**
+ * Implements hook_permission().
+ */
+function mda_utils_permission() {
+	return array(
+		'administer MDA' => array(
+			'title' => t('Administer MDA Utils'),
+		),
+	);
+}
+
+/**
  * Implements hook_form_FORM_ID_alter().
  */
 function mda_utils_form_identite_node_form_alter(&$form, &$form_state, $form_id) {
